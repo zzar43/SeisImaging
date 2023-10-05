@@ -2,7 +2,7 @@
 
 void ModelPML::ReadJson()
 {
-    std::ifstream f("sample.json");
+    std::ifstream f("./data/temp_py.json");
     json data = json::parse(f);
 
     Nx = data["Nx"];

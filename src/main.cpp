@@ -1,6 +1,7 @@
 #include <iostream>
 #include <eigen3/Eigen/Dense>
 #include "model.hpp"
+#include "equation.hpp"
 
 using namespace Eigen;
 using namespace std;
@@ -19,16 +20,24 @@ void AddOne(MatrixXd &A)
 int main()
 {
 
-    ModelPML model;
+    AcousticWaveEq2D model;
 
     model.ReadJson();
 
-    cout << model.Nx << endl;
-    cout << model.Ny << endl;
-    cout << model.c_pml << endl;
-    cout << model.source_position_pml << endl;
-    cout << model.receiver_position_pml << endl;
-    cout << model.source_fn << endl;
+    model.Solve();
+
+    model.WriteJson();
+
+    // ModelPML model;
+
+    // model.ReadJson();
+
+    // cout << model.Nx << endl;
+    // cout << model.Ny << endl;
+    // cout << model.c_pml << endl;
+    // cout << model.source_position_pml << endl;
+    // cout << model.receiver_position_pml << endl;
+    // cout << model.source_fn << endl;
 
 
     // MatrixXd A(10,20);
