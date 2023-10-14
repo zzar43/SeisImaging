@@ -88,10 +88,6 @@ void AcousticWaveEq2D::Solve(int source_idx)
         dxvx1_b = dx_backward(vx1, dx);
         dyvy1_b = dy_backward(vy1, dy);
 
-        // std::cout << u1.rows() << " " << u1.cols() << std::endl;
-        // std::cout << sigma_x.rows() << " " << sigma_x.cols() << std::endl;
-        // std::cout << sigma_y.rows() << " " << sigma_y.cols() << std::endl;
-
         part1 = -1 * u1.cwiseProduct(sigma_x + sigma_y);
         part2 = b.cwiseProduct(dxvx1_f + dyvy1_f);
         u2 = u1 + dt * (part1 + part2 + phi1 + psi1);
@@ -114,7 +110,6 @@ void AcousticWaveEq2D::Solve(int source_idx)
         phi1 = phi2;
         psi1 = psi2;
     }
-    std::cout << u2.row(30) << std::endl;
 }
 
 void AcousticWaveEq2D::WriteJson()
