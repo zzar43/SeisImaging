@@ -32,8 +32,10 @@ int main()
 
     // model.ReadJson();
 
-    // cout << model.Nx << endl;
-    // cout << model.Ny << endl;
+    cout << model.Nx << endl;
+    cout << model.Ny << endl;
+    cout << model.Nx_pml << " " << model.Ny_pml << endl;
+
     // cout << model.c_pml << endl;
     // cout << model.source_position_pml << endl;
     // cout << model.receiver_position_pml << endl;

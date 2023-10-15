@@ -55,6 +55,8 @@ MatrixXd Equation2D::dy_backward(MatrixXd U, double h)
 
 void AcousticWaveEq2D::Solve(int source_idx)
 {
+    std::cout << "acoustic: " << Nx << " " << Ny << std::endl;
+    std::cout << "acoustic: " << Nx_pml << " " << Ny_pml << std::endl;
     // initialization
     a = MatrixXd::Zero(Nx_pml, Ny_pml);
     b = MatrixXd::Zero(Nx_pml, Ny_pml);
@@ -114,6 +116,7 @@ void AcousticWaveEq2D::Solve(int source_idx)
 
 void AcousticWaveEq2D::WriteJson()
 {
+    std::cout << u2.size() << std::endl;
     json j_u2 = AcousticWaveEq2D::EigenToJson(u2);
 
     json output = {

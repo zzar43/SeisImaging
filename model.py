@@ -1,120 +1,96 @@
 import numpy as np
 import json
+import copy
 
-class BasicInfo():
-    def __init__(self, Nx, Ny, dx, dy, Nt, dt):
+class Mesh:
+    def __init__(self, Nx, Ny, dx, dy):
         self.Nx = Nx
         self.Ny = Ny
         self.dx = dx
         self.dy = dy
+        self.N = Nx * Ny
+
+    def printMeshInfo(self):
+        print("Model spatial size: Nx = %d, Ny = %d" % (self.Nx, self.Ny))
+        print("Model spatial grid size: dx = %f, dy = %f" % (self.dx, self.dy))
+        print("Model size: N = %d" % (self.N))
+
+class Time:
+    def __init__(self, Nt, dt):
         self.Nt = Nt
         self.dt = dt
-        self.t = np.linspace(0, (Nt-1)*dt, Nt)
 
-class Source(BasicInfo):
+    def printTimeInfo(self):
+        print("Time info: Nt = %d, dt = %f" % (self.Nt, self.dt))
 
-    def __init__(self, Nx, Ny, dx, dy, Nt, dt):
-        self.source_num = 0
-        self.source_position = []
-        self.source_fn = []
-        BasicInfo.__init__(self, Nx, Ny, dx, dy, Nt, dt)
-
-    def SetSource(self, source_num, source_position, fre, center):
+class Acquisition:
+    def __init__(self, source_num, source_position, receiver_num, receiver_position, source_type=0):
+        self.source_type = source_type
         self.source_num = source_num
-        self.source_position = np.array(source_position)
-        self.source_fn = np.zeros([self.source_num, self.Nt])
-        for i in range(self.source_num):
-            self.source_fn[i,:] = self.RickerFn(fre, center)
-
-    def RickerFn(self, fre, center):
-        return (1 - 2 * np.pi**2 * fre**2 * (self.t-center)**2) * np.exp(-1 * np.pi**2 * fre**2 * (self.t-center)**2)
-    
-class Receiver(BasicInfo):
-    
-    def __init__(self, Nx, Ny, dx, dy, Nt, dt):
-        self.receiver_num = 0
-        self.receiver_position = []
-        BasicInfo.__init__(self, Nx, Ny, dx, dy, Nt, dt)
-
-    def SetReceiver(self, receiver_num, receiver_position):
         self.receiver_num = receiver_num
-        self.receiver_position = np.array(receiver_position)
 
-class Model(Source, Receiver, BasicInfo):
+        if type(source_position) != np.ndarray:
+            self.source_position = np.array(source_position)
+        else:
+            self.source_position = source_position
 
-    def __init__(self, Nx, Ny, dx, dy, Nt, dt):
-        Source.__init__(self, Nx, Ny, dx, dy, Nt, dt)
-        Receiver.__init__(self, Nx, Ny, dx, dy, Nt, dt)
-        self.c = np.zeros([Nx, Ny])
-        self.rho = np.zeros([Nx, Ny])
+        if type(receiver_position) != np.ndarray:
+            self.receiver_position = np.array(receiver_position)
+        else:
+            self.receiver_position = receiver_position
 
-    def ReadVelocity(self, c):
+        if self.source_position.shape != (self.source_num, 2):
+            raise IndexError("Please check dimension of source.")
+        
+        if self.receiver_position.shape != (self.receiver_num, 2):
+            raise IndexError("Please check dimension of receiver.")
+
+class Field:
+    def __init__(self, M):
+        self.data = np.zeros([M.Nx, M.Ny])
+
+    def readData(self, data):
+        if self.data.shape != data.shape:
+            raise IndexError("Please check field shape and mesh shape.")
+        self.data = data
+
+# This model is for forward modelling and inversion
+class Model:
+    def __init__(self, m: Mesh, t: Time, c: np.ndarray, rho: np.ndarray, a: Acquisition):
+        
+        self.Nx, self.Ny = m.Nx, m.Ny
+        self.dx, self.dy = m.dx, m.dy
+        self.Nt, self.dt = t.Nt, t.dt
+
         self.c = c
-
-    def ReadDensity(self, rho):
         self.rho = rho
 
-    def PrintModelInfo(self):
-        print("------------------------------")
-        print(f"Model grid size: Nx = {self.Nx}, Ny = {self.Ny}")
-        print(f"Model spatial size: dx = {self.dx}, dy = {self.dy}")
-        print(f"Time information: Nt = {self.Nt}, dt = {self.dt}")
-        print(f"CFL number is: ")
-        print("------------------------------")
+        self.source_num, self.source_position = a.source_num, a.source_position
+        self.receiver_num, self.receiver_position = a.receiver_num, a.receiver_position
+
+        # inverse problem
+        self.c_inv = c
+        self.rho_inv = rho
 
 class ModelPML(Model):
+    def __init__(self, m: Mesh, t: Time, c: np.ndarray, rho: np.ndarray, a: Acquisition, pml_len: int, pml_alpha: float, pml_method=0):
 
-    def __init__(self, Nx, Ny, dx, dy, Nt, dt, pml_len, pml_alpha):
-        Model.__init__(self, Nx, Ny, dx, dy, Nt, dt)
+        Model.__init__(self, m, t, c, rho, a)
+
         self.pml_len = pml_len
         self.pml_alpha = pml_alpha
-        self.Nx_pml = Nx + 2*pml_len
-        self.Ny_pml = Ny + 2*pml_len
-        self.c_pml = np.zeros([self.Nx_pml, self.Ny_pml])
-        self.rho_pml = np.zeros([self.Nx_pml, self.Ny_pml])
-        self.pml_value = []
-        self.sigma_x = []
-        self.sigma_y = []
-        self.source_position_pml = []
-        self.receiver_position_pml = []
-        # self.SetPML()
+        
+        self.Nx_pml = m.Nx + 2 * pml_len
+        self.Ny_pml = m.Ny + 2 * pml_len
 
-    def SetPML(self, method=0):
-        # method = 
-        # 0: linear
-        # 1: quadratic
-        # 2: exponential, tbd
+        self.source_position_pml = self.source_position + pml_len
+        self.receiver_position_pml = self.receiver_position + pml_len
 
-        if method == 0:
-            self.pml_value = np.linspace(0, 1, self.pml_len)
-            self.pml_value = self.pml_value * self.pml_alpha
-        if method == 1:
-            self.pml_value = np.linspace(0, 1, self.pml_len)
-            self.pml_value = self.pml_value ** 2 * self.pml_alpha
-        self.pml_value = np.flip(self.pml_value)
-
-        self.Nx_pml = self.Nx + 2*self.pml_len
-        self.Ny_pml = self.Ny + 2*self.pml_len
         self.c_pml = self.__ExpandPMLArea(self.c)
         self.rho_pml = self.__ExpandPMLArea(self.rho)
-        self.source_position_pml = self.source_position + self.pml_len
-        self.receiver_position_pml = self.receiver_position + self.pml_len
-        # for i in range(self.source_num):
-        #     self.source_position_pml.append(self.source_position[i] + self.pml_len)
-        #     print(i)
-        # for i in range(self.receiver_num):
-        #     self.receiver_position_pml.append(self.receiver_position[i] + self.pml_len)
-        #     print(i)
 
-        self.sigma_x = np.zeros([self.Nx_pml, self.Ny_pml])
-        self.sigma_y = np.zeros([self.Nx_pml, self.Ny_pml])
-        for i in range(self.pml_len):
-            self.sigma_x[i, :] = self.pml_value[i]
-            self.sigma_x[-1-i, :] = self.pml_value[i]
-            self.sigma_y[:, i] = self.pml_value[i]
-            self.sigma_y[:, -1-i] = self.pml_value[i]
-        self.sigma_x = self.sigma_x
-        self.sigma_y = self.sigma_y
+        self.__PMLMethod(pml_method)
+        self.__PMLSigma()
 
     def __ExpandPMLArea(self, A):
         A_pml = np.zeros([self.Nx_pml, self.Ny_pml])
@@ -126,95 +102,43 @@ class ModelPML(Model):
             A_pml[:,-1-i] = A_pml[:,-1-self.pml_len]
         return A_pml
     
-    def PrintModelInfo(self):
-        print("------------------------------")
-        print(f"Model grid size: Nx = {self.Nx}, Ny = {self.Ny}")
-        print(f"Model spatial size: dx = {self.dx}, dy = {self.dy}")
-        print(f"Time information: Nt = {self.Nt}, dt = {self.dt}")
-        print(f"CFL number is: ")
-        print(f"PML information: pml_len = {self.pml_len}, pml_alpha = {self.pml_alpha}")
-        print("------------------------------")
+    def __PMLMethod(self, pml_method):
+        if pml_method == 0:
+            self.pml_value = np.linspace(0, 1, self.pml_len)
+            self.pml_value = self.pml_value * self.pml_alpha
+        if pml_method == 1:
+            self.pml_value = np.linspace(0, 1, self.pml_len)
+            self.pml_value = self.pml_value ** 2 * self.pml_alpha
+        self.pml_value = np.flip(self.pml_value)
 
-    def WriteModel(self):
-        output_dict = {
-            "Nx" : self.Nx,
-            "Ny" : self.Ny,
-            "dx" : self.dx,
-            "dy" : self.dy,
-            "Nt" : self.Nt,
-            "dt" : self.dt,
-            "pml_len" : self.pml_len,
-            "pml_alpha" : self.pml_alpha,
-            "c" : self.c.tolist(),
-            "rho" : self.rho.tolist(),
-            "source_num" : self.source_num,
-            "source_position" : self.source_position.tolist(),
-            "source_position_pml" : self.source_position_pml.tolist(),
-            "source_fn" : self.source_fn.tolist(),
-            "receiver_num" : self.receiver_num,
-            "receiver_position" : self.receiver_position.tolist(),
-            "receiver_position_pml" : self.receiver_position_pml.tolist(),
-            "Nx_pml" : self.Nx_pml,
-            "Ny_pml" : self.Ny_pml,
-            "c_pml" : self.c_pml.tolist(),
-            "rho_pml" : self.rho_pml.tolist(),
-            "sigma_x" : self.sigma_x.tolist(),
-            "sigma_y" : self.sigma_y.tolist()
-        }
+    def __PMLSigma(self):
+        self.sigma_x = np.zeros([self.Nx_pml, self.Ny_pml])
+        self.sigma_y = np.zeros([self.Nx_pml, self.Ny_pml])
+        for i in range(self.pml_len):
+            self.sigma_x[i, :] = self.pml_value[i]
+            self.sigma_x[-1-i, :] = self.pml_value[i]
+            self.sigma_y[:, i] = self.pml_value[i]
+            self.sigma_y[:, -1-i] = self.pml_value[i]
+        self.sigma_x = self.sigma_x
+        self.sigma_y = self.sigma_y
 
-        print("Output to sample.json")
-        # Serializing json
-        json_object = json.dumps(output_dict, indent=4)
-        with open("./data/temp_py.json", "w") as outfile:
-            outfile.write(json_object)
-        print("Output done.")
-        print("------------------------------")
+    def writeModel(self):
+        json_dict = copy.deepcopy(self.__dict__)
+        for key, value in self.__dict__.items():
+            if type(value) == np.ndarray:
+                json_dict[key] = value.tolist()
+
+        with open('./data/temp_py.json', 'w', encoding='utf-8') as f:
+            json.dump(json_dict, f, ensure_ascii=False, indent=4)
 
 
-        
-# def main():
-#     Nx = 101
-#     Ny = 101
-#     dx = 0.01
-#     dy = 0.01
-#     Nt = 501
-#     dt = 0.001
+if __name__ == "__main__":
+    m = Mesh(41,81,0.01,0.02)
+    t = Time(201,0.001)
+    a = Acquisition(3, [[i,5] for i in range(3)],
+                    10, [[i,0] for i in range(10)])
+    c = np.random.rand(41,81)
+    rho = np.random.rand(41,81)
 
-#     pml_len = 30
-#     pml_alpha = 20
-
-#     # c = np.random.randn(Nx, Ny)
-#     # rho = np.random.randn(Nx, Ny)
-#     # for i in range(Nx):
-#     #     for j in range(Ny):
-#     #         c[i,j] = i * Ny + j
-#     #         rho[i,j] = i + j
-
-#     c = np.ones([Nx, Ny])
-#     rho = np.ones([Nx, Ny])
-
-#     m = ModelPML(Nx, Ny, dx, dy, Nt, dt, pml_len, pml_alpha)
-
-#     m.ReadVelocity(c)
-#     m.ReadDensity(rho)
-#     m.SetSource(3, [[i*10, 5] for i in range(3)], 5, 0.2)
-#     m.SetReceiver(11, [[i*10, 0] for i in range(11)])
-#     m.SetPML()
-
-#     m.PrintModelInfo()
-
-#     m.WriteModel()
-
-#     # print(m.c)
-#     # print(m.c_pml)
-#     # print(m.sigma_x)
-#     # print(m.source_position)
-#     # print(m.source_position_pml)
-
-#     print(m.source_fn.shape)
-
-
-
-
-# if __name__ == "__main__":
-#     main()
+    model = ModelPML(m, t, c, rho, a, 30, 20)
+    model.writeModel()
