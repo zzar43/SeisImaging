@@ -3,66 +3,97 @@
 #include <iostream>
 #include <fstream>
 #include <string>
-#include <eigen3/Eigen/Dense>
 
+#include "eigen3/Eigen/Dense"
 #include "json.hpp"
 
 using json = nlohmann::json;
 
-class BasicInfo
+// container
+class SeisData
 {
 public:
-    int Nx;
-    int Ny;
+    int Nx_pml, Ny_pml, Nt;
+    Eigen::VectorXd last_wavefield, wavefield, seis_signal, seis_signal_multi;
+};
+
+class SourceData
+{
+public:
+    int source_num, Nt;
+    // data should be a 2d matrix with source_num by Nt
+    Eigen::VectorXd data;
+    void ReadJson();
+    void ReadVector(json data, Eigen::VectorXd &vec, std::string var_name, int N);
+};
+
+
+class Mesh
+{
+public:
+    int Nx, Ny;
+    double dx, dy;
+    Eigen::VectorXd x, y;
+};
+
+class Time
+{
+public:
     int Nt;
-    double dx;
-    double dy;
     double dt;
-
-    BasicInfo() : Nx(0), Ny(0), Nt(0), dx(0.), dy(0.), dt(0.) {}
-    ~BasicInfo() {}
+    Eigen::VectorXd t;
 };
 
-class Source : virtual public BasicInfo
+class Acquisition
 {
 public:
-    int source_num;
-    Eigen::MatrixXi source_position;
-    Eigen::MatrixXd source_fn;
+    int source_num, receiver_num;
+    Eigen::VectorXi source_position, receiver_position;
 };
 
-class Recevier : virtual public BasicInfo
+class Model
 {
 public:
-    int receiver_num;
-    Eigen::MatrixXi receiver_position;
-};
+    int Nx, Ny, Nt;
+    double dx, dy, dt;
+    Eigen::VectorXd x, y, t;
 
-class Model : public Source, public Recevier
-{
-public:
-    Eigen::MatrixXd c;
-    Eigen::MatrixXd rho;
+    int source_num, receiver_num;
+    Eigen::VectorXi source_position, receiver_position;
+
+    // fields
+    Eigen::VectorXd c, rho;
+
+    Model() {}
+    Model(const Mesh &mesh, const Time &time, const Acquisition &acquisition);
+
+    void ReadVelocity(){};
+    void ReadDensity(){};
 };
 
 class ModelPML : public Model
 {
 public:
-    int Nx_pml;
-    int Ny_pml;
-    Eigen::MatrixXd c_pml;
-    Eigen::MatrixXd rho_pml;
-    Eigen::MatrixXd sigma_x;
-    Eigen::MatrixXd sigma_y;
-    Eigen::MatrixXi source_position_pml;
-    Eigen::MatrixXi receiver_position_pml;
+    // read data
+    json data;
 
-    ModelPML() : Nx_pml(0), Ny_pml(0) {}
-    ~ModelPML() {}
+    // PML
+    int pml_len;
+    double pml_alpha;
+
+    int Nx_pml, Ny_pml;
+    Eigen::VectorXi source_position_pml, receiver_position_pml;
+
+    // fields
+    Eigen::VectorXd c_pml, rho_pml, sigma_x, sigma_y;
+
+    // SeisData
+    SeisData seis_data;
+
+    ModelPML();
+    ModelPML(const Mesh &mesh, const Time &time, const Acquisition &acquisition, int pml_len, double pml_alpha);
 
     void ReadJson();
-
-private:
-    void ReadArray2D(Eigen::MatrixXd &var, json data, std::string var_name, int dim1, int dim2);
-    void ReadArray2D(Eigen::MatrixXi &var, json data, std::string var_name, int dim1, int dim2);
+    void ReadVector(json data, Eigen::VectorXd &vec, std::string var_name, int N);
+    void ReadVector(json data, Eigen::VectorXi &vec, std::string var_name, int N);
 };

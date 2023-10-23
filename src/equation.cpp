@@ -1,135 +1,123 @@
 #include "equation.hpp"
 
-MatrixXd Equation2D::dx_forward(MatrixXd U, double h)
+void Acoustic::Solve(const ModelPML &model, const SourceData &source_data, int source_idx)
 {
-    MatrixXd Ux(U.rows(), U.cols());
-    for (int j = 1; j < U.cols() - 1; j++)
+    // init
+    a = Eigen::VectorXd::Zero(model.Nx_pml * model.Ny_pml);
+    b = Eigen::VectorXd::Zero(model.Nx_pml * model.Ny_pml);
+    u1 = Eigen::VectorXd::Zero(model.Nx_pml * model.Ny_pml);
+    u2 = Eigen::VectorXd::Zero(model.Nx_pml * model.Ny_pml);
+    vx1 = Eigen::VectorXd::Zero(model.Nx_pml * model.Ny_pml);
+    vx2 = Eigen::VectorXd::Zero(model.Nx_pml * model.Ny_pml);
+    vy1 = Eigen::VectorXd::Zero(model.Nx_pml * model.Ny_pml);
+    vy2 = Eigen::VectorXd::Zero(model.Nx_pml * model.Ny_pml);
+    phi1 = Eigen::VectorXd::Zero(model.Nx_pml * model.Ny_pml);
+    phi2 = Eigen::VectorXd::Zero(model.Nx_pml * model.Ny_pml);
+    psi1 = Eigen::VectorXd::Zero(model.Nx_pml * model.Ny_pml);
+    psi2 = Eigen::VectorXd::Zero(model.Nx_pml * model.Ny_pml);
+    dxvx1_f = Eigen::VectorXd::Zero(model.Nx_pml * model.Ny_pml);
+    dyvy1_f = Eigen::VectorXd::Zero(model.Nx_pml * model.Ny_pml);
+    dxvx1_b = Eigen::VectorXd::Zero(model.Nx_pml * model.Ny_pml);
+    dyvy1_b = Eigen::VectorXd::Zero(model.Nx_pml * model.Ny_pml);
+    dxu2 = Eigen::VectorXd::Zero(model.Nx_pml * model.Ny_pml);
+    dyu2 = Eigen::VectorXd::Zero(model.Nx_pml * model.Ny_pml);
+
+    part1 = Eigen::VectorXd::Zero(model.Nx_pml * model.Ny_pml);
+    part2 = Eigen::VectorXd::Zero(model.Nx_pml * model.Ny_pml);
+
+    a = model.rho_pml.cwiseInverse();
+    b = model.rho_pml.cwiseProduct(model.c_pml.cwiseProduct(model.c_pml));
+
+    // record
+    seis_data.seis_signal = Eigen::VectorXd::Zero(model.receiver_num * model.Nt);
+
+    for (int iter = 0; iter < model.Nt; iter++)
     {
-        for (int i = 1; i < U.rows() - 1; i++)
+        TimeUpdate(iter, model, source_data, source_idx);
+        RecordSeisSignal(iter, model);
+    }
+    seis_data.last_wavefield = u2;
+};
+
+void Acoustic::TimeUpdate(int time_iter, const ModelPML &model, const SourceData &source_data, int source_idx)
+{
+    int s_idx_1 = model.source_position_pml(source_idx * 2 + 0);
+    int s_idx_2 = model.source_position_pml(source_idx * 2 + 1);
+
+    int Ny = model.Ny_pml;
+
+    dxvx1_f = diff.DxForward(vx1);
+    dyvy1_f = diff.DyForward(vy1);
+    dxvx1_b = diff.DxBackward(vx1);
+    dyvy1_b = diff.DyBackward(vy1);
+
+    part1 = -1 * u1.cwiseProduct(model.sigma_x + model.sigma_y);
+    part2 = b.cwiseProduct(dxvx1_f + dyvy1_f);
+    u2 = u1 + model.dt * (part1 + part2 + phi1 + psi1);
+
+    // update source
+    u2(s_idx_1 * Ny + s_idx_2) += b(s_idx_1 * Ny + s_idx_2) * source_data.data(source_idx * model.Nt + time_iter) * model.dt;
+
+    dxu2 = diff.DxBackward(u2);
+    dyu2 = diff.DyBackward(u2);
+
+    vx2 = vx1 + model.dt * (a.cwiseProduct(dxu2) - model.sigma_x.cwiseProduct(vx1));
+    vy2 = vy1 + model.dt * (a.cwiseProduct(dyu2) - model.sigma_y.cwiseProduct(vy1));
+    phi2 = phi1 + model.dt * b.cwiseProduct(model.sigma_y.cwiseProduct(dxvx1_f));
+    psi2 = psi1 + model.dt * b.cwiseProduct(model.sigma_x.cwiseProduct(dyvy1_f));
+
+    // update
+    u1 = u2;
+    vx1 = vx2;
+    vy1 = vy2;
+    phi1 = phi2;
+    psi1 = psi2;
+};
+
+void Acoustic::ForwardModelling(const ModelPML &model, const SourceData &source_data)
+{
+    int N = model.receiver_num * model.Nt;
+    seis_data.seis_signal_multi = Eigen::VectorXd::Zero(model.source_num * N);
+
+    for (int source_idx = 0; source_idx < model.source_num; source_idx++)
+    {
+        Solve(model, source_data, source_idx);
+        for (int i = 0; i < N; i++)
         {
-            Ux(i, j) = (U(i + 1, j) - U(i, j)) / h;
+            seis_data.seis_signal_multi(source_idx * N + i) = seis_data.seis_signal(i);
         }
     }
-    return Ux;
 }
 
-MatrixXd Equation2D::dx_backward(MatrixXd U, double h)
+void Acoustic::RecordSeisSignal(int time_iter, const ModelPML &model)
 {
-    MatrixXd Ux(U.rows(), U.cols());
-    for (int j = 1; j < U.cols() - 1; j++)
+    int Ny = model.Ny_pml;
+    for (int receiver_idx = 0; receiver_idx < model.receiver_num; receiver_idx++)
     {
-        for (int i = 1; i < U.rows() - 1; i++)
-        {
-            Ux(i, j) = (U(i, j) - U(i - 1, j)) / h;
-        }
-    }
-    return Ux;
-}
-
-MatrixXd Equation2D::dy_forward(MatrixXd U, double h)
-{
-    MatrixXd Ux(U.rows(), U.cols());
-    for (int j = 1; j < U.cols() - 1; j++)
-    {
-        for (int i = 1; i < U.rows() - 1; i++)
-        {
-            Ux(i, j) = (U(i, j + 1) - U(i, j)) / h;
-        }
-    }
-    return Ux;
-}
-
-MatrixXd Equation2D::dy_backward(MatrixXd U, double h)
-{
-    MatrixXd Ux(U.rows(), U.cols());
-    for (int j = 1; j < U.cols() - 1; j++)
-    {
-        for (int i = 1; i < U.rows() - 1; i++)
-        {
-            Ux(i, j) = (U(i, j) - U(i, j - 1)) / h;
-        }
-    }
-    return Ux;
-}
-
-
-void AcousticWaveEq2D::Solve(int source_idx)
-{
-    std::cout << "acoustic: " << Nx << " " << Ny << std::endl;
-    std::cout << "acoustic: " << Nx_pml << " " << Ny_pml << std::endl;
-    // initialization
-    a = MatrixXd::Zero(Nx_pml, Ny_pml);
-    b = MatrixXd::Zero(Nx_pml, Ny_pml);
-    u1 = MatrixXd::Zero(Nx_pml, Ny_pml);
-    u2 = MatrixXd::Zero(Nx_pml, Ny_pml);
-    vx1 = MatrixXd::Zero(Nx_pml, Ny_pml);
-    vx2 = MatrixXd::Zero(Nx_pml, Ny_pml);
-    vy1 = MatrixXd::Zero(Nx_pml, Ny_pml);
-    vy2 = MatrixXd::Zero(Nx_pml, Ny_pml);
-    phi1 = MatrixXd::Zero(Nx_pml, Ny_pml);
-    phi2 = MatrixXd::Zero(Nx_pml, Ny_pml);
-    psi1 = MatrixXd::Zero(Nx_pml, Ny_pml);
-    psi2 = MatrixXd::Zero(Nx_pml, Ny_pml);
-    dxvx1_f = MatrixXd::Zero(Nx_pml, Ny_pml);
-    dyvy1_f = MatrixXd::Zero(Nx_pml, Ny_pml);
-    dxvx1_b = MatrixXd::Zero(Nx_pml, Ny_pml);
-    dyvy1_b = MatrixXd::Zero(Nx_pml, Ny_pml);
-    dxu2 = MatrixXd::Zero(Nx_pml, Ny_pml);
-    dyu2 = MatrixXd::Zero(Nx_pml, Ny_pml);
-
-    MatrixXd part1 = MatrixXd::Zero(Nx_pml, Ny_pml);
-    MatrixXd part2 = MatrixXd::Zero(Nx_pml, Ny_pml);
-
-    a = rho_pml.cwiseInverse();
-    b = rho_pml.cwiseProduct(c_pml.cwiseProduct(c_pml));
-
-    for (int iter = 0; iter < Nt; iter++)
-    {
-        dxvx1_f = dx_forward(vx1, dx);
-        dyvy1_f = dy_forward(vy1, dy);
-        dxvx1_b = dx_backward(vx1, dx);
-        dyvy1_b = dy_backward(vy1, dy);
-
-        part1 = -1 * u1.cwiseProduct(sigma_x + sigma_y);
-        part2 = b.cwiseProduct(dxvx1_f + dyvy1_f);
-        u2 = u1 + dt * (part1 + part2 + phi1 + psi1);
-
-        // update source
-        u2(source_position_pml(source_idx, 0), source_position_pml(source_idx, 1)) += b(source_position_pml(source_idx, 0), source_position_pml(source_idx, 1)) * source_fn(source_idx, iter) * dt;
-
-        dxu2 = dx_backward(u2, dx);
-        dyu2 = dy_backward(u2, dy);
-
-        vx2 = vx1 + dt * (a.cwiseProduct(dxu2) - sigma_x.cwiseProduct(vx1));
-        vy2 = vy1 + dt * (a.cwiseProduct(dyu2) - sigma_y.cwiseProduct(vy1));
-        phi2 = phi1 + dt * b.cwiseProduct(sigma_y.cwiseProduct(dxvx1_f));
-        psi2 = psi1 + dt * b.cwiseProduct(sigma_x.cwiseProduct(dyvy1_f));
-
-        // update
-        u1 = u2;
-        vx1 = vx2;
-        vy1 = vy2;
-        phi1 = phi2;
-        psi1 = psi2;
+        int r_idx_1 = model.receiver_position_pml(receiver_idx * 2 + 0);
+        int r_idx_2 = model.receiver_position_pml(receiver_idx * 2 + 1);
+        seis_data.seis_signal(receiver_idx * model.Nt + time_iter) = u2(r_idx_1 * Ny + r_idx_2);
     }
 }
 
-void AcousticWaveEq2D::WriteJson()
+void Acoustic::WriteData()
 {
-    std::cout << u2.size() << std::endl;
-    json j_u2 = AcousticWaveEq2D::EigenToJson(u2);
+    json j_last_wavefield = Acoustic::EigenToJson(seis_data.last_wavefield);
+    json j_seis_signal = Acoustic::EigenToJson(seis_data.seis_signal);
+    json j_seis_signal_multi = Acoustic::EigenToJson(seis_data.seis_signal_multi);
 
     json output = {
-        {"u2", j_u2}
-    };
+        {"last_wavefield", j_last_wavefield},
+        {"seis_signal", j_seis_signal},
+        {"seis_signal_multi", j_seis_signal_multi}};
 
-    std::ofstream o("./data/temp_cpp.json");
+    std::ofstream o("./data/seis_data.json");
     o << std::setw(4) << output << std::endl;
 }
 
-json AcousticWaveEq2D::EigenToJson(MatrixXd A)
+json Acoustic::EigenToJson(const Eigen::VectorXd &vec)
 {
-    std::vector<double> v(A.data(), A.data() + A.rows() * A.cols());
+    std::vector<double> v(vec.data(), vec.data() + vec.rows());
     json j_vec(v);
     return j_vec;
 }

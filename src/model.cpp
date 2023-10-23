@@ -1,57 +1,105 @@
 #include "model.hpp"
 
+#include <iostream>
+using namespace std;
+
+// container
+void SourceData::ReadJson()
+{
+    std::ifstream f("./data/source.json");
+    json j_data = json::parse(f);
+
+    source_num = j_data["source_num"];
+    Nt = j_data["Nt"];
+    data = Eigen::VectorXd(source_num * Nt);
+    ReadVector(j_data, data, "data", source_num * Nt);
+};
+
+void SourceData::ReadVector(json data, Eigen::VectorXd &vec, std::string var_name, int N)
+{
+    for (int i = 0; i < N; i++)
+    {
+        vec(i) = data[var_name][i];
+    }
+}
+
+Model::Model(const Mesh &mesh, const Time &time, const Acquisition &acquisition)
+{
+    Nx = mesh.Nx;
+    Ny = mesh.Ny;
+    dx = mesh.dx;
+    dy = mesh.dy;
+
+    Nt = time.Nt;
+    dt = time.dt;
+
+    source_num = acquisition.source_num;
+    receiver_num = acquisition.receiver_num;
+    source_position = acquisition.source_position;
+    receiver_position = acquisition.receiver_position;
+};
+
+ModelPML::ModelPML(const Mesh &mesh, const Time &time, const Acquisition &acquisition, int pml_len, double pml_alpha)
+{
+    Nx = mesh.Nx;
+    Ny = mesh.Ny;
+    dx = mesh.dx;
+    dy = mesh.dy;
+
+    Nt = time.Nt;
+    dt = time.dt;
+
+    source_num = acquisition.source_num;
+    receiver_num = acquisition.receiver_num;
+    source_position = acquisition.source_position;
+    receiver_position = acquisition.receiver_position;
+};
+
+ModelPML::ModelPML() {}
+
 void ModelPML::ReadJson()
 {
-    std::ifstream f("./data/temp_py.json");
+    std::ifstream f("./data/data.json");
     json data = json::parse(f);
 
     Nx = data["Nx"];
     Ny = data["Ny"];
+    Nx_pml = data["Nx_pml"];
+    Ny_pml = data["Ny_pml"];
     Nt = data["Nt"];
     dx = data["dx"];
     dy = data["dy"];
     dt = data["dt"];
     source_num = data["source_num"];
     receiver_num = data["receiver_num"];
-    Nx_pml = data["Nx_pml"];
-    Ny_pml = data["Ny_pml"];
 
-    c_pml = Eigen::MatrixXd(Nx_pml, Ny_pml);
-    ReadArray2D(c_pml, data, "c_pml", Nx_pml, Ny_pml);
-    rho_pml = Eigen::MatrixXd(Nx_pml, Ny_pml);
-    ReadArray2D(rho_pml, data, "rho_pml", Nx_pml, Ny_pml);
+    c_pml = Eigen::VectorXd(Nx_pml * Ny_pml);
+    rho_pml = Eigen::VectorXd(Nx_pml * Ny_pml);
+    sigma_x = Eigen::VectorXd(Nx_pml * Ny_pml);
+    sigma_y = Eigen::VectorXd(Nx_pml * Ny_pml);
+    source_position_pml = Eigen::VectorXi(2 * source_num);
+    receiver_position_pml = Eigen::VectorXi(2 * receiver_num);
 
-    source_position_pml = Eigen::MatrixXi(source_num, 2);
-    ReadArray2D(source_position_pml, data, "source_position_pml", source_num, 2);
-    source_fn = Eigen::MatrixXd(source_num, Nt);
-    ReadArray2D(source_fn, data, "source_fn", source_num, Nt);
-    receiver_position_pml = Eigen::MatrixXi(receiver_num, 2);
-    ReadArray2D(receiver_position_pml, data, "receiver_position_pml", receiver_num, 2);
-
-    sigma_x = Eigen::MatrixXd(Nx_pml, Ny_pml);
-    ReadArray2D(sigma_x, data, "sigma_x", Nx_pml, Ny_pml);
-    sigma_y = Eigen::MatrixXd(Nx_pml, Ny_pml);
-    ReadArray2D(sigma_y, data, "sigma_y", Nx_pml, Ny_pml);
+    ReadVector(data, c_pml, "c_pml", Nx_pml * Ny_pml);
+    ReadVector(data, rho_pml, "rho_pml", Nx_pml * Ny_pml);
+    ReadVector(data, sigma_x, "sigma_x", Nx_pml * Ny_pml);
+    ReadVector(data, sigma_y, "sigma_y", Nx_pml * Ny_pml);
+    ReadVector(data, source_position_pml, "source_position_pml", 2 * source_num);
+    ReadVector(data, receiver_position_pml, "receiver_position_pml", 2 * receiver_num);
 }
 
-void ModelPML::ReadArray2D(Eigen::MatrixXd &var, json data, std::string var_name, int dim1, int dim2)
+void ModelPML::ReadVector(json data, Eigen::VectorXd &vec, std::string var_name, int N)
 {
-    for (int i = 0; i < dim1; i++)
+    for (int i = 0; i < N; i++)
     {
-        for (int j = 0; j < dim2; j++)
-        {
-            var(i, j) = data[var_name][i][j];
-        }
+        vec(i) = data[var_name][i];
     }
 }
 
-void ModelPML::ReadArray2D(Eigen::MatrixXi &var, json data, std::string var_name, int dim1, int dim2)
+void ModelPML::ReadVector(json data, Eigen::VectorXi &vec, std::string var_name, int N)
 {
-    for (int i = 0; i < dim1; i++)
+    for (int i = 0; i < N; i++)
     {
-        for (int j = 0; j < dim2; j++)
-        {
-            var(i, j) = data[var_name][i][j];
-        }
+        vec(i) = data[var_name][i];
     }
 }

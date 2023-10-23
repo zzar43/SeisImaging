@@ -1,59 +1,54 @@
 #include <iostream>
-#include <eigen3/Eigen/Dense>
+#include <chrono>
+
+#include "eigen3/Eigen/Dense"
 #include "model.hpp"
+#include "diffop.hpp"
 #include "equation.hpp"
 
-using namespace Eigen;
 using namespace std;
 
-void AddOne(MatrixXd &A)
+void myPrint(Eigen::MatrixXd vec, int Nx, int Ny)
 {
-    for (int i = 0; i < 10; i++)
+    for (int i = 0; i < Nx; i++)
     {
-        for (int j = 0; j < 20; j++)
+        for (int j = 0; j < Ny; j++)
         {
-            A(i, j) += 1;
+            cout << vec(i * Ny + j) << " ";
         }
+        cout << endl;
     }
 }
 
 int main()
 {
-
-    AcousticWaveEq2D model;
-
+    ModelPML model;
     model.ReadJson();
 
-    model.Solve();
+    SourceData source;
+    source.ReadJson();
 
-    model.WriteJson();
+    Acoustic eq(model);
+    // eq.Solve(model, source, 8);
+    eq.ForwardModelling(model, source);
+    eq.WriteData();
 
-    // ModelPML model;
+    // test openmp
+    // model.Nx_pml = 10001;
+    // model.Ny_pml = 20001;
 
-    // model.ReadJson();
+    // Eigen::VectorXd vec1(model.Nx_pml * model.Ny_pml);
+    // Eigen::VectorXd vec2(model.Nx_pml * model.Ny_pml);
+    // Eigen::VectorXd res(model.Nx_pml * model.Ny_pml);
+    // DiffOp diff(model);
+    // auto time1 = std::chrono::high_resolution_clock::now();
+    // res = diff.DyBackward(vec1);
+    // auto time2 = std::chrono::high_resolution_clock::now();
+    // res = diff.DyBackward_p(vec2);
+    // auto time3 = std::chrono::high_resolution_clock::now();
 
-    cout << model.Nx << endl;
-    cout << model.Ny << endl;
-    cout << model.Nx_pml << " " << model.Ny_pml << endl;
-
-    // cout << model.c_pml << endl;
-    // cout << model.source_position_pml << endl;
-    // cout << model.receiver_position_pml << endl;
-    // cout << model.source_fn << endl;
-
-
-    // MatrixXd A(10,20);
-    // for (int i = 0; i < 10; i++)
-    // {
-    //     for (int j = 0; j < 20; j++)
-    //     {
-    //         A(i, j) = i + j;
-    //     }
-    // }
-
-    // cout << A << endl;
-
-    // AddOne(A);
-
-    // cout << A << endl;
+    // auto duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(time2 - time1);
+    // auto duration2 = std::chrono::duration_cast<std::chrono::milliseconds>(time3 - time2);
+    // std::cout << "代码块执行时间: " << duration1.count() << " 毫秒" << std::endl;
+    // std::cout << "代码块执行时间: " << duration2.count() << " 毫秒" << std::endl;
 }

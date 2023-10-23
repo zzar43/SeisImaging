@@ -1,6 +1,32 @@
 import numpy as np
 import json
-import copy
+
+# define source function
+class SourceData:
+    def __init__(self):
+        self.source_num = 0
+        self.Nt = 0
+        self.data = np.array([])
+
+    def SetSource(self, source_num, Nt, dt, fre, center):
+        self.source_num = source_num
+        self.Nt = Nt
+        t = np.linspace(0, (Nt-1)*dt, Nt)
+        self.data = np.zeros([source_num, Nt])
+        for i in range(source_num):
+            self.data[i] = self.RickerFn(t, fre, center)
+
+    def RickerFn(self, t, fre, center):
+        return (1 - 2 * np.pi**2 * fre**2 * (t-center)**2) * np.exp(-1 * np.pi**2 * fre**2 * (t-center)**2)
+    
+    def WriteSource(self):
+        json_dict = self.__dict__
+        for key, value in self.__dict__.items():
+            if type(value) == np.ndarray:
+                json_dict[key] = value.flatten().tolist()
+
+        with open('./data/source.json', 'w', encoding='utf-8') as f:
+            json.dump(json_dict, f, ensure_ascii=False, indent=4)
 
 class Mesh:
     def __init__(self, Nx, Ny, dx, dy):
@@ -122,23 +148,69 @@ class ModelPML(Model):
         self.sigma_x = self.sigma_x
         self.sigma_y = self.sigma_y
 
-    def writeModel(self):
-        json_dict = copy.deepcopy(self.__dict__)
+    def WriteModel(self):
+        json_dict = self.__dict__
         for key, value in self.__dict__.items():
             if type(value) == np.ndarray:
-                json_dict[key] = value.tolist()
+                json_dict[key] = value.flatten().tolist()
 
-        with open('./data/temp_py.json', 'w', encoding='utf-8') as f:
+        with open('./data/data.json', 'w', encoding='utf-8') as f:
             json.dump(json_dict, f, ensure_ascii=False, indent=4)
 
+# read seis data
+def ReadWavefield(model):
+    Nx = model.Nx
+    Ny = model.Ny
+    pml_len = model.pml_len
+
+    f = open('./data/seis_data.json')
+    data = json.load(f)
+    f.close()
+    
+    last_wavefield = np.array(data["last_wavefield"]).reshape(Nx+2*pml_len, Ny+2*pml_len)
+    return last_wavefield[pml_len:Nx+pml_len, pml_len:Ny+pml_len]
+
+def ReadSeisMulti(model):
+    source_num = model.source_num
+    receiver_num = model.receiver_num
+    Nt = model.Nt
+
+    f = open('./data/seis_data.json')
+    data = json.load(f)
+    f.close()
+    
+    seis_signal_multi = np.array(data["seis_signal_multi"]).reshape(source_num, receiver_num, Nt)
+    return seis_signal_multi
 
 if __name__ == "__main__":
-    m = Mesh(41,81,0.01,0.02)
-    t = Time(201,0.001)
-    a = Acquisition(3, [[i,5] for i in range(3)],
-                    10, [[i,0] for i in range(10)])
-    c = np.random.rand(41,81)
-    rho = np.random.rand(41,81)
 
-    model = ModelPML(m, t, c, rho, a, 30, 20)
-    model.writeModel()
+    Nx = 81
+    Ny = 101
+    Nt = 301
+    dt = 0.001
+    dx = 0.01
+    dy = 0.01
+    
+    source_num = 9
+    receiver_num = 101
+
+    pml_len = 30
+    pml_alpha = 20
+
+    source_fre = 5
+    source_center = 0.2
+
+    m = Mesh(Nx, Ny, dx, dy)
+    t = Time(Nt, dt)
+    a = Acquisition(source_num, [[i*10,5] for i in range(source_num)],
+                    receiver_num, [[i,0] for i in range(receiver_num)])
+    
+    c = np.ones([Nx, Ny])
+    rho = np.ones([Nx, Ny])
+
+    model = ModelPML(m, t, c, rho, a, pml_len, pml_alpha)
+    model.WriteModel()
+
+    s = SourceData()
+    s.SetSource(source_num, Nt, dt, source_fre, source_center)
+    s.WriteSource()
