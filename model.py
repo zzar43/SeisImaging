@@ -32,9 +32,11 @@ class Mesh:
     def __init__(self, Nx, Ny, dx, dy):
         self.Nx = Nx
         self.Ny = Ny
+        self.N = Nx * Ny
         self.dx = dx
         self.dy = dy
-        self.N = Nx * Ny
+        self.x = np.linspace(0, (Nx-1)*dx, Nx)
+        self.y = np.linspace(0, (Ny-1)*dy, Ny)
 
     def printMeshInfo(self):
         print("Model spatial size: Nx = %d, Ny = %d" % (self.Nx, self.Ny))
@@ -45,6 +47,7 @@ class Time:
     def __init__(self, Nt, dt):
         self.Nt = Nt
         self.dt = dt
+        self.t = np.linspace(0, (Nt-1)*dt, Nt)
 
     def printTimeInfo(self):
         print("Time info: Nt = %d, dt = %f" % (self.Nt, self.dt))
@@ -87,6 +90,9 @@ class Model:
         self.Nx, self.Ny = m.Nx, m.Ny
         self.dx, self.dy = m.dx, m.dy
         self.Nt, self.dt = t.Nt, t.dt
+        self.x = m.x
+        self.y = m.y
+        self.t = t.t
 
         self.c = c
         self.rho = rho

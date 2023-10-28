@@ -1,7 +1,7 @@
 #include <iostream>
 #include <chrono>
 
-#include "eigen3/Eigen/Dense"
+#include "Eigen/Dense"
 #include "model.hpp"
 #include "diffop.hpp"
 #include "equation.hpp"
@@ -32,6 +32,10 @@ int main()
     // eq.Solve(model, source, 8);
     eq.ForwardModelling(model, source);
     eq.WriteData();
+
+    // std::cout << model.x << std::endl;
+    // std::cout << model.y << std::endl;
+    // std::cout << model.t << std::endl;
 
     // test openmp
     // model.Nx_pml = 10001;

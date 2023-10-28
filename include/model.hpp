@@ -4,16 +4,23 @@
 #include <fstream>
 #include <string>
 
-#include "eigen3/Eigen/Dense"
+#include "Eigen/Dense"
 #include "json.hpp"
 
 using json = nlohmann::json;
 
 // container
+class WavefieldData
+{
+    public:
+    Eigen::VectorXd t, wavefield;
+};
+
 class SeisData
 {
 public:
     int Nx_pml, Ny_pml, Nt;
+    Eigen::VectorXd x, y, t;
     Eigen::VectorXd last_wavefield, wavefield, seis_signal, seis_signal_multi;
 };
 
@@ -22,12 +29,13 @@ class SourceData
 public:
     int source_num, Nt;
     // data should be a 2d matrix with source_num by Nt
+    Eigen::VectorXd x, y, t;
     Eigen::VectorXd data;
     void ReadJson();
     void ReadVector(json data, Eigen::VectorXd &vec, std::string var_name, int N);
 };
 
-
+// model
 class Mesh
 {
 public:

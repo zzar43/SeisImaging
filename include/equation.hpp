@@ -5,7 +5,7 @@
 #include "model.hpp"
 #include "diffop.hpp"
 
-#include "eigen3/Eigen/Dense"
+#include "Eigen/Dense"
 
 class Equation
 {

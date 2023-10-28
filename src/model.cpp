@@ -73,12 +73,20 @@ void ModelPML::ReadJson()
     source_num = data["source_num"];
     receiver_num = data["receiver_num"];
 
+    x = Eigen::VectorXd(Nx);
+    y = Eigen::VectorXd(Ny);
+    t = Eigen::VectorXd(Nt);
+
     c_pml = Eigen::VectorXd(Nx_pml * Ny_pml);
     rho_pml = Eigen::VectorXd(Nx_pml * Ny_pml);
     sigma_x = Eigen::VectorXd(Nx_pml * Ny_pml);
     sigma_y = Eigen::VectorXd(Nx_pml * Ny_pml);
     source_position_pml = Eigen::VectorXi(2 * source_num);
     receiver_position_pml = Eigen::VectorXi(2 * receiver_num);
+
+    ReadVector(data, x, "x", Nx);
+    ReadVector(data, y, "y", Ny);
+    ReadVector(data, t, "t", Nt);
 
     ReadVector(data, c_pml, "c_pml", Nx_pml * Ny_pml);
     ReadVector(data, rho_pml, "rho_pml", Nx_pml * Ny_pml);

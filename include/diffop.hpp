@@ -2,7 +2,7 @@
 
 #include "model.hpp"
 #include "omp.h"
-#include "eigen3/Eigen/Dense"
+#include "Eigen/Dense"
 
 // differential operator in 2d
 class DiffOp
